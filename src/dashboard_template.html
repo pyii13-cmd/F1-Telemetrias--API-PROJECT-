@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ca"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F1 · Anàlisi de pneumàtics</title>
+<style>
+*{box-sizing:border-box} body{margin:0;background:#f2f2ed;color:#192923;font:16px/1.5 system-ui,sans-serif}
+header{background:#163d32;color:white;padding:36px max(5vw,20px)} h1{font-size:clamp(28px,5vw,52px);line-height:1.1;margin:.35em 0} main{max-width:1180px;margin:auto;padding:24px 16px}
+section{background:white;border:1px solid #d1d8d3;border-radius:12px;padding:20px;margin-bottom:16px;overflow:auto}h2{margin:0 0 8px;font-size:21px}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}button{border:1px solid #49685c;border-radius:6px;background:white;color:#173628;padding:9px 18px;cursor:pointer;font-weight:700}button[aria-pressed=true]{background:#214f3c;color:white}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{white-space:nowrap;text-align:right;border-bottom:1px solid #dae3dc;padding:8px}th:first-child,td:first-child{text-align:left}
+.bar-row{display:grid;grid-template-columns:minmax(74px,130px) 1fr 78px;align-items:center;gap:10px;margin:9px 0;font-variant-numeric:tabular-nums}.track{position:relative;height:20px;background:linear-gradient(to right,transparent 49.8%,#75867c 50%,transparent 50.2%),#f0f4f1}.bar{position:absolute;height:12px;top:4px}.number{text-align:right}
+</style>
+<header><span id="race"></span><h1>Degradació dels pneumàtics</h1><span id="totals"></span></header>
+<main><nav aria-label="Compost" id="filters"></nav>
+<section><h2>Pendent per equip · <span id="compound"></span></h2><p>Segons per volta d’edat del pneumàtic. El centre marca el zero. Cap a la dreta, el temps corregit augmenta.</p><div id="chart"></div></section>
+<section><h2>Comparació de stints</h2><p>Equips ordenats pel pendent mitjà. La dispersió indica quant varia el pendent entre stints.</p>
+<table><thead><tr><th>Equip</th><th>Pendent (s/volta)</th><th>Ritme base (s)</th><th>Dispersió (s/volta)</th><th>Stints</th><th>Voltes</th></tr></thead><tbody id="rows"></tbody></table></section>
+</main>
+<script type="application/json" id="data">__DASHBOARD_JSON__</script>
+<script>
+const data = JSON.parse(document.getElementById('data').textContent);
+const get = id => document.getElementById(id);
+const format = (value, digits) => value.toLocaleString('ca-ES',{minimumFractionDigits:digits,maximumFractionDigits:digits});
+const signed = value => (value > 0 ? '+' : '') + format(value,4);
+get('race').textContent = data.metadata.race;
+const stats = data.summary_stats;
+get('totals').textContent = stats.teams_analyzed + ' equips · ' + stats.compounds + ' compostos · ' + stats.total_stints + ' stints · ' + stats.total_laps + ' voltes analitzades';
+const allSlopes = data.teams.flatMap(t => t.compounds.map(c => Math.abs(c.degradation)));
+const scale = Math.max(...allSlopes) || 1;
+function selectCompound(compound) {
+  get('compound').textContent = compound;
+  for (const button of get('filters').children) button.setAttribute('aria-pressed', button.textContent === compound);
+  const entries = data.teams.flatMap(t => t.compounds.filter(c => c.compound === compound).map(c => ({...c, name:t.name}))).sort((a,b) => a.degradation-b.degradation);
+  get('rows').replaceChildren(); get('chart').replaceChildren();
+  for (const entry of entries) {
+    const tr = get('rows').insertRow();
+    for (const value of [entry.name,signed(entry.degradation),format(entry.base_pace,3),format(entry.degradation_std,4),entry.stints,entry.total_laps]) tr.insertCell().textContent = value;
+    const row = document.createElement('div'); row.className='bar-row';
+    const name = document.createElement('span'); name.textContent=entry.name;
+    const track=document.createElement('div'); track.className='track';
+    const bar=document.createElement('span'); bar.className='bar';
+    const width=50*Math.abs(entry.degradation)/scale;
+    bar.style.width=width+'%'; bar.style.left=(entry.degradation<0 ? 50-width : 50)+'%';
+    bar.style.background=entry.degradation<0 ? '#267556' : '#b45329';
+    const number=document.createElement('span'); number.className='number'; number.textContent=signed(entry.degradation);
+    track.append(bar); row.append(name,track,number); get('chart').append(row);
+  }
+}
+for (const compound of data.compounds) {
+  const button=document.createElement('button'); button.textContent=compound;
+  button.onclick=() => selectCompound(compound); get('filters').append(button);
+}
+selectCompound(data.compounds[0]);
+</script></html>
